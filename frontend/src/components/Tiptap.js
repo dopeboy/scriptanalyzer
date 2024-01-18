@@ -10,16 +10,34 @@ import { CommentIcon } from './CommentIcon'
 import { BubbleMenu, EditorContent, JSONContent, useEditor } from '@tiptap/react'
 import { v4 } from 'uuid'
 import Placeholder from '@tiptap/extension-placeholder'
+import { useRouter } from 'next/navigation'
+import { getAPIURL } from '@/lib/api';
+
 
 import "./Editor.scss";
+import { Skeleton } from './Skeleton';
 
 
-const Tiptap = () => {
+const Tiptap = ({ id }) => {
   const [comments, setComments] = useState([])
-
   const [activeCommentId, setActiveCommentId] = useState(null)
-
   const commentsSectionRef = useRef(null)
+  const [name, setName] = useState()
+  const [text, setText] = useState()
+  const router = useRouter()
+  const [isLoading, setLoading] = useState(id ? true : false)
+
+  if (id) {
+    useEffect(() => {
+      fetch(`${getAPIURL()}/scripts/${id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setName(data.name)
+          setText(data.text)
+          setLoading(false)
+        })
+    }, [])
+  }
 
   const focusCommentWithActiveId = (id) => {
     if (!commentsSectionRef.current) return
@@ -92,35 +110,88 @@ const Tiptap = () => {
 
       },
     },
-    placeholder: "Paste your script here"
+    placeholder: "Paste your script here",
+    content: text,
+    onUpdate: ({ editor }) => {
+      setText(editor.getHTML())
+    }
   })
 
   const lol = () => {
     console.log(editor.getText())
+    console.log(editor.getJSON())
+
+    // If we are editing a script
+    if (id) {
+      fetch(`${getAPIURL()}/scripts/${id}`, {
+        method: 'PATCH',
+        body:
+          JSON.stringify({ name: name, text: JSON.stringify(editor.getJSON()) }),
+
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setName(data.name)
+          setText(data.text)
+          setLoading(false)
+        })
+    }
+
+    // If a new script
+    else {
+      fetch(`${getAPIURL()}/scripts`, {
+        method: 'POST',
+        body:
+          JSON.stringify({ name: name, text: JSON.stringify(editor.getJSON()) }),
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          router.push(`/script/${data.id}`, undefined, { shallow: true })
+          //setName(data.name)
+          //setText(data.text)
+          //setLoading(false)
+        })
+    }
+  }
+
+  // If we are loading an existing script
+  useEffect(() => {
+    if (editor && !isLoading && id) {
+      editor.commands.setContent(JSON.parse(text))
+    }
+  }, [editor, isLoading]);
+
+  if (isLoading) {
+    return <Skeleton />
   }
 
   return (
     <>
       <div className="flex">
         <div className="w-3/5">
-          <input type="text" className="front-extrabold text-gray-900 md:text-4xl block w-full sm:text-md focus:ring-blue-500 focus:border-blue-500 outline-none" autoFocus placeholder='Type your script name here' />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            type="text" className="front-extrabold text-gray-900 md:text-4xl block w-full sm:text-md focus:ring-blue-800 focus:border-blue-700 outline-none" autoFocus placeholder='Type your script name here' />
         </div>
         <div className="w-2/5">
           <div className="px-16 grid grid-cols-2 gap-4">
             <div className="text-center">
-              <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-48" onClick={lol}>
+              <button className="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded w-48" onClick={lol}>
                 Save
               </button>
             </div>
             <div className="text-center">
-              <button type="button" className="w-48 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50" disabled>
+              <button type="button" className="w-48 bg-blue-700 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50" disabled>
                 Process
               </button>
             </div>
           </div>
         </div>
       </div>
-      <div className="flex">
+      <div className="flex pt-4">
         <div className="w-3/5">
           <Toolbar editor={editor} />
         </div>
